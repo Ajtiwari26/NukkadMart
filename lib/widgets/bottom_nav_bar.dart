@@ -37,8 +37,8 @@ class BottomNavBar extends StatelessWidget {
                 onTap: () => onTap(0),
               ),
               _NavItem(
-                icon: Icons.qr_code_scanner_rounded,
-                label: 'Scan',
+                icon: Icons.mic_rounded,
+                label: 'AI Voice',
                 isActive: currentIndex == 1,
                 onTap: () => onTap(1),
               ),

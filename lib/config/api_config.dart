@@ -1,14 +1,6 @@
 class ApiConfig {
-  // Base URL - Change this to your backend URL
-  // For physical device: Use your computer's IP address
-  // For Android emulator: Use http://10.0.2.2:8000
-  // For iOS simulator: Use http://localhost:8000
-  
-  // LOCAL DEVELOPMENT - Backend running on your machine
-  //static const String baseUrl = 'http://10.233.137.38:8000';
-  
-  // PRODUCTION - Uncomment when deploying
-   static const String baseUrl = 'https://nukkad-mart-backend.vercel.app';
+  // Base URL - Production (Render)
+  static const String baseUrl = 'https://nukkadmartbackend.onrender.com';
   
   static const String apiVersion = '/api/v1';
   static const String apiBaseUrl = '$baseUrl$apiVersion';
@@ -22,8 +14,8 @@ class ApiConfig {
   static const String nudge = '$apiBaseUrl/nudge';
   static const String ocr = '$apiBaseUrl/ocr';
   
-  // WebSocket
-  static const String wsBaseUrl = 'ws://10.233.137.38:8000$apiVersion';
+  // WebSocket - Production
+  static const String wsBaseUrl = 'wss://nukkadmartbackend.onrender.com$apiVersion';
   
   // Timeouts
   static const Duration connectTimeout = Duration(seconds: 30);

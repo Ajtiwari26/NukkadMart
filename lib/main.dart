@@ -27,6 +27,7 @@ import 'screens/address_form_screen.dart';
 import 'screens/saved_addresses_screen.dart';
 import 'screens/map_picker_screen.dart';
 import 'screens/ai_scanner_screen.dart';
+import 'screens/ai_voice_cart_screen.dart';
 
 import 'package:google_maps_flutter_android/google_maps_flutter_android.dart';
 import 'package:google_maps_flutter_platform_interface/google_maps_flutter_platform_interface.dart';
@@ -140,6 +141,7 @@ class NukkadMartApp extends StatelessWidget {
           '/saved-addresses': (context) => const SavedAddressesScreen(),
           '/map-picker': (context) => const MapPickerScreen(),
           '/ai-scanner': (context) => const AiScannerScreen(),
+          '/ai-voice-cart': (context) => const AIVoiceCartScreen(),
         },
       ),
     );
