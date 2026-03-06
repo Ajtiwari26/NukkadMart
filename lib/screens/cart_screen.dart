@@ -4,6 +4,7 @@ import '../providers/cart_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/order_provider.dart';
 import '../models/order_model.dart';
+import '../models/cart_item_model.dart';
 import '../services/order_service.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_theme.dart';
@@ -106,8 +107,36 @@ class CartScreen extends StatelessWidget {
               child: ListView(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 children: [
-                  // Items
-                  ...cartProvider.items.map((item) => _CartItemTile(item: item)),
+                  // Group items by store
+                  ...() {
+                    final Map<String, List<dynamic>> storeItems = {};
+                    for (var item in cartProvider.items) {
+                      final storeId = item.product.storeId;
+                      if (!storeItems.containsKey(storeId)) {
+                        storeItems[storeId] = [];
+                      }
+                      storeItems[storeId]!.add(item);
+                    }
+
+                    final List<Widget> widgets = [];
+                    storeItems.forEach((storeId, items) {
+                      // Fetch the store name somehow? For now, we'll just show Store ID or generic name
+                      // Ideally we'd have the store name from the product model, 
+                      // but if we don't, we can just use "Store: [ID]"
+                      widgets.add(Padding(
+                        padding: const EdgeInsets.only(top: 16, bottom: 8),
+                        child: Text(
+                          'Store: $storeId',
+                          style: AppTheme.heading3.copyWith(
+                            color: AppColors.primary,
+                            fontSize: 16,
+                          ),
+                        ),
+                      ));
+                      widgets.addAll(items.map((item) => _CartItemTile(item: item)));
+                    });
+                    return widgets;
+                  }(),
 
                   const SizedBox(height: 16),
 
@@ -275,7 +304,7 @@ class CartScreen extends StatelessWidget {
                         const SizedBox(height: 12),
                         _BillRow(label: 'Subtotal', value: cartProvider.subtotal),
                         // Only show delivery and handling charges for delivery orders
-                        if (cartProvider.isDelivery) ...[
+                        if (cartProvider.isDelivery && !Provider.of<AuthProvider>(context, listen: false).isDemoMode) ...[
                           _BillRow(
                             label: 'Delivery Charges',
                             value: cartProvider.deliveryFee,
@@ -283,15 +312,25 @@ class CartScreen extends StatelessWidget {
                           ),
                           _BillRow(label: 'Handling Fee', value: cartProvider.tax),
                         ],
+                        if (cartProvider.isDelivery && Provider.of<AuthProvider>(context, listen: false).isDemoMode) ...[
+                          _BillRow(
+                            label: 'Delivery Charges',
+                            value: 0,
+                            suffix: 'DEMO',
+                          ),
+                          _BillRow(label: 'Handling Fee', value: 0),
+                        ],
                         const Padding(
                           padding: EdgeInsets.symmetric(vertical: 8),
                           child: Divider(),
                         ),
                         _BillRow(
                           label: 'Total',
-                          value: cartProvider.isDelivery 
-                              ? cartProvider.total 
-                              : cartProvider.subtotal, // For takeaway, total = subtotal
+                          value: Provider.of<AuthProvider>(context, listen: false).isDemoMode
+                              ? cartProvider.subtotal
+                              : (cartProvider.isDelivery
+                                  ? cartProvider.total
+                                  : cartProvider.subtotal),
                           isTotal: true,
                         ),
                       ],
@@ -324,9 +363,12 @@ class CartScreen extends StatelessWidget {
                               Text('Payment Method',
                                   style: AppTheme.bodySmall.copyWith(
                                       fontWeight: FontWeight.w500)),
-                              Text('Pay via UPI',
-                                  style: AppTheme.bodyMedium.copyWith(
-                                      fontWeight: FontWeight.w600)),
+                              Text(
+                                Provider.of<AuthProvider>(context, listen: false).isDemoMode
+                                    ? '🧪 Demo — No Payment'
+                                    : 'Pay via UPI',
+                                style: AppTheme.bodyMedium.copyWith(
+                                    fontWeight: FontWeight.w600)),
                             ],
                           ),
                         ),
@@ -608,10 +650,15 @@ class _CheckoutBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // For takeaway, total = subtotal (no delivery or handling charges)
-    final displayTotal = cartProvider.isDelivery 
-        ? cartProvider.total 
-        : cartProvider.subtotal;
+    final isDemoMode = Provider.of<AuthProvider>(context, listen: false).isDemoMode;
+    // For demo mode: total = subtotal (no delivery/handling charges)
+    // For takeaway: total = subtotal
+    // For delivery: total = subtotal + delivery + tax
+    final displayTotal = isDemoMode
+        ? cartProvider.subtotal
+        : (cartProvider.isDelivery 
+            ? cartProvider.total 
+            : cartProvider.subtotal);
     
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
@@ -704,6 +751,8 @@ class _CheckoutBar extends StatelessWidget {
       return;
     }
 
+    if (cartProvider.items.isEmpty) return;
+
     // Show loading dialog
     showDialog(
       context: context,
@@ -720,7 +769,7 @@ class _CheckoutBar extends StatelessWidget {
             children: [
               CircularProgressIndicator(color: AppColors.primary),
               const SizedBox(height: 16),
-              Text('Placing order...', style: AppTheme.bodyMedium),
+              Text('Placing orders...', style: AppTheme.bodyMedium),
             ],
           ),
         ),
@@ -729,22 +778,52 @@ class _CheckoutBar extends StatelessWidget {
 
     try {
       final orderService = OrderService();
-      final order = await orderService.createOrder(
-        userId: authProvider.user!.userId,
-        storeId: cartProvider.storeId!,
-        items: cartProvider.items,
-        fulfillmentType: cartProvider.fulfillmentType,
-      );
+      
+      // Group items by storeId
+      final Map<String, List<CartItemModel>> storeItems = {};
+      for (var item in cartProvider.items) {
+        final storeId = item.product.storeId;
+        if (!storeItems.containsKey(storeId)) {
+          storeItems[storeId] = [];
+        }
+        storeItems[storeId]!.add(item);
+      }
+
+      // Create an order for each store
+      List<OrderModel> placedOrders = [];
+      for (var entry in storeItems.entries) {
+        final order = await orderService.createOrder(
+          userId: authProvider.user!.userId,
+          storeId: entry.key,
+          items: entry.value,
+          fulfillmentType: cartProvider.fulfillmentType,
+        );
+        placedOrders.add(order);
+      }
 
       cartProvider.clearCart();
 
       if (context.mounted) {
         Navigator.pop(context); // Close dialog
-        Navigator.pushReplacementNamed(
-          context,
-          '/order-tracking',
-          arguments: order.orderId,
-        );
+        
+        // If multiple orders were placed, go to orders list directly, 
+        // else go to specific order tracking.
+        if (placedOrders.length > 1) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Successfully placed ${placedOrders.length} separate orders!'),
+              backgroundColor: AppColors.success,
+            ),
+          );
+          // Navigate to home which has the orders tab, or push order history
+          Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+        } else if (placedOrders.isNotEmpty) {
+          Navigator.pushReplacementNamed(
+            context,
+            '/order-tracking',
+            arguments: placedOrders.first.orderId,
+          );
+        }
       }
     } catch (e) {
       if (context.mounted) {

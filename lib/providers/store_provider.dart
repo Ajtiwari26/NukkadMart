@@ -49,6 +49,26 @@ class StoreProvider with ChangeNotifier {
     }
   }
 
+  // Load demo stores (no location needed)
+  Future<void> loadDemoStores() async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      _stores = await _storeService.getDemoStores();
+      print('Loaded ${_stores.length} demo stores');
+      _isLoading = false;
+      notifyListeners();
+    } catch (e) {
+      print('Error loading demo stores: $e');
+      _error = e.toString();
+      _stores = [];
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   // Select store
   Future<void> selectStore(String storeId) async {
     _isLoading = true;

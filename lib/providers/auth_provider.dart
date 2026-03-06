@@ -8,27 +8,65 @@ class AuthProvider with ChangeNotifier {
   UserModel? _user;
   bool _isLoading = false;
   String? _error;
+  bool _isDemoMode = false;
 
   UserModel? get user => _user;
   bool get isLoading => _isLoading;
   String? get error => _error;
   bool get isAuthenticated => _user != null;
+  bool get isDemoMode => _isDemoMode;
 
   // Initialize - Check if user is logged in
   Future<void> initialize() async {
     final prefs = await SharedPreferences.getInstance();
+
+    // Check demo mode first
+    _isDemoMode = prefs.getBool('isDemoMode') ?? false;
+    if (_isDemoMode) {
+      _user = UserModel(
+        userId: 'DEMO_USER',
+        name: 'Demo User',
+        phone: '0000000000',
+        totalPurchases: 0,
+        totalOrders: 0,
+        createdAt: DateTime.now(),
+        addresses: [],
+      );
+      notifyListeners();
+      return;
+    }
+
     final userId = prefs.getString('userId');
     
     if (userId != null) {
       try {
         _user = await _authService.getUserById(userId);
-        // Load local addresses if needed, or rely on _user to have them from backend
         notifyListeners();
       } catch (e) {
-        // User data not found, clear local storage
         await logout();
       }
     }
+  }
+
+  // Enter Demo Mode (skip registration)
+  Future<void> enterDemoMode() async {
+    _isDemoMode = true;
+    _user = UserModel(
+      userId: 'DEMO_USER',
+      name: 'Demo User',
+      phone: '0000000000',
+      totalPurchases: 0,
+      totalOrders: 0,
+      createdAt: DateTime.now(),
+      addresses: [],
+    );
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('isDemoMode', true);
+    await prefs.setString('userId', 'DEMO_USER');
+    await prefs.setString('userName', 'Demo User');
+
+    notifyListeners();
   }
 
   // Quick Register/Login
@@ -140,15 +178,14 @@ class AuthProvider with ChangeNotifier {
   // Logout
   Future<void> logout() async {
     _user = null;
+    _isDemoMode = false;
     
     final prefs = await SharedPreferences.getInstance();
     // Clear Auth
     await prefs.remove('userId');
     await prefs.remove('userName');
     await prefs.remove('userPhone');
-    // Clear Preferred Location? (Optional, maybe keep it for convenience)
-    // await prefs.remove('preferred_lat');
-    // await prefs.remove('preferred_lng');
+    await prefs.remove('isDemoMode');
     
     notifyListeners();
   }

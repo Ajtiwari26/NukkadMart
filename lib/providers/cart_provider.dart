@@ -111,12 +111,11 @@ class CartProvider with ChangeNotifier {
 
   // Add item to cart
   void addItem(ProductModel product, {String? storeId, double quantity = 1.0}) {
-    // Check if adding from different store
-    if (_storeId != null && storeId != null && _storeId != storeId) {
-      throw Exception('Cannot add items from different stores');
-    }
-
-    _storeId = storeId;
+    // We now allow adding items from different stores
+    
+    // Store ID is now kept track of mostly to show the latest store interacted with,
+    // but the actual cart placement will group items by their product storeId
+    _storeId = storeId ?? product.storeId;
 
     // Check if item already exists
     final existingIndex = _items.indexWhere(

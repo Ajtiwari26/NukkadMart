@@ -33,6 +33,11 @@ class _HomeScreenState extends State<HomeScreen> {
     _initLocation();
   }
 
+  bool get _isDemoMode {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    return authProvider.isDemoMode;
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -41,6 +46,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _initLocation() async {
     try {
+      // Demo mode — skip location, load demo stores directly
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      if (authProvider.isDemoMode) {
+        setState(() {
+          _locationText = '🧪 DEMO MODE';
+        });
+        final storeProvider = Provider.of<StoreProvider>(context, listen: false);
+        await storeProvider.loadDemoStores();
+        return;
+      }
+
       // 1. Try cached location first (FASTEST - no API calls)
       final cachedLocation = await LocationCacheService.getLocation();
       if (cachedLocation != null) {
@@ -55,7 +71,6 @@ class _HomeScreenState extends State<HomeScreen> {
       }
 
       // 2. Check for Preferred Address (Fast Path)
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final preferred = await authProvider.loadPreferredAddress();
       
       if (preferred != null) {
@@ -360,6 +375,58 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ),
+
+              // DEMO MODE Banner
+              if (_isDemoMode)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            const Color(0xFFFFA726).withOpacity(0.2),
+                            const Color(0xFFFF7043).withOpacity(0.15),
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: const Color(0xFFFFA726).withOpacity(0.4),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          const Text('🧪', style: TextStyle(fontSize: 18)),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'DEMO MODE',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w800,
+                                    color: const Color(0xFFFFA726),
+                                    letterSpacing: 1,
+                                  ),
+                                ),
+                                Text(
+                                  'Test stores with demo inventory — no real orders',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
 
               // Search bar
               SliverToBoxAdapter(

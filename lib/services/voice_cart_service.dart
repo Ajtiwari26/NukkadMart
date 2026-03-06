@@ -37,11 +37,13 @@ class VoiceCartService {
   final _cartUpdateController = StreamController<Map<String, dynamic>>.broadcast();
   final _cartActionController = StreamController<CartAction>.broadcast();
   final _stateController = StreamController<VoiceAssistantState>.broadcast();
+  final _productSelectionController = StreamController<ProductSelectionEvent?>.broadcast();
 
   Stream<ConversationMessage> get conversationStream => _conversationController.stream;
   Stream<Map<String, dynamic>> get cartUpdateStream => _cartUpdateController.stream;
   Stream<CartAction> get cartActionStream => _cartActionController.stream;
   Stream<VoiceAssistantState> get stateStream => _stateController.stream;
+  Stream<ProductSelectionEvent?> get productSelectionStream => _productSelectionController.stream;
 
   VoiceCartService() {
     _player.setVolume(1.0);
@@ -50,13 +52,30 @@ class VoiceCartService {
   /// Connect to WebSocket and start a live session
   Future<void> startSession(
     String userId, {
-    required double latitude,
-    required double longitude,
+    double? latitude,
+    double? longitude,
+    String? storeId,
   }) async {
     try {
       final wsUrl = ApiConfig.baseUrl.replaceFirst('http', 'ws');
+      var url = '$wsUrl/api/v1/ws/voice/customer/$userId';
+      
+      // Build query parameters
+      List<String> params = [];
+      if (latitude != null && longitude != null) {
+        params.add('latitude=$latitude');
+        params.add('longitude=$longitude');
+      }
+      if (storeId != null) {
+        params.add('store_id=$storeId');
+      }
+      
+      if (params.isNotEmpty) {
+        url += '?' + params.join('&');
+      }
+      
       _channel = WebSocketChannel.connect(
-        Uri.parse('$wsUrl/api/v1/ws/voice/customer/$userId?latitude=$latitude&longitude=$longitude'),
+        Uri.parse(url),
       );
 
       _isActive = true;
@@ -157,26 +176,47 @@ class VoiceCartService {
           _processCartUpdate(data);
           break;
 
+        case 'product_selection':
+          // Show product selection UI
+          _productSelectionController.add(ProductSelectionEvent(
+            productName: data['product_name'] ?? '',
+            action: data['action'] ?? 'add',
+            quantity: (data['quantity'] ?? 1.0).toDouble(),
+            options: (data['options'] as List<dynamic>?)
+                    ?.map((opt) => ProductOption.fromJson(opt))
+                    .toList() ??
+                [],
+          ));
+          break;
+
         case 'transcript':
           final text = data['text'] ?? '';
           final isUser = data['is_user'] ?? false;
 
           // Only show meaningful transcripts
           if (text.trim().isNotEmpty) {
-            if (isUser) {
-              // Show user text immediately
-              _conversationController.add(ConversationMessage(
-                text: text,
-                isUser: isUser,
-                timestamp: DateTime.now(),
-              ));
-            } else {
-              // Hold AI text until audio is ready to play
-              _pendingAITranscript = text;
+            // Show transcript immediately for both user and AI
+            _conversationController.add(ConversationMessage(
+              text: text,
+              isUser: isUser,
+              timestamp: DateTime.now(),
+            ));
+            
+            if (!isUser) {
               _isAiSpeaking = true;
               _stateController.add(VoiceAssistantState.aiSpeaking);
             }
           }
+          break;
+
+        case 'processing':
+          // Backend is analyzing user's speech — show processing indicator
+          _stateController.add(VoiceAssistantState.processing);
+          break;
+
+        case 'clear_selection':
+          // Cancel event — clear the product selection panel
+          _productSelectionController.add(null);
           break;
       }
     } catch (e) {
@@ -214,16 +254,6 @@ class VoiceCartService {
       // Backend (Sarvam) sends complete WAV audio, save it directly
       final tempFile = File('${tempDir.path}/sonic_audio_${_audioChunkCounter++}.wav');
       await tempFile.writeAsBytes(audioData);
-
-      // If we have pending text, show it EXACTLY when audio starts playing
-      if (_pendingAITranscript != null) {
-        _conversationController.add(ConversationMessage(
-          text: _pendingAITranscript!,
-          isUser: false,
-          timestamp: DateTime.now(),
-        ));
-        _pendingAITranscript = null;
-      }
 
       await _player.setFilePath(tempFile.path);
       await _player.play();
@@ -328,7 +358,31 @@ class VoiceCartService {
     _cartUpdateController.close();
     _cartActionController.close();
     _stateController.close();
+    _productSelectionController.close();
     endSession();
+  }
+  
+  /// Send product selection to backend
+  void sendProductSelection(String productId, double quantity) {
+    if (_channel != null) {
+      _channel!.sink.add(json.encode({
+        'event': 'product_selected',
+        'product_id': productId,
+        'quantity': quantity,
+      }));
+      print('📤 Sent product selection: $productId (qty: $quantity)');
+    }
+  }
+
+  /// Sync existing cart state from Flutter to backend on session start
+  void sendCartSync(List<Map<String, dynamic>> cartItems) {
+    if (_channel != null) {
+      _channel!.sink.add(json.encode({
+        'event': 'sync_cart',
+        'items': cartItems,
+      }));
+      print('🔄 Synced ${cartItems.length} cart items to backend');
+    }
   }
 }
 
@@ -356,4 +410,55 @@ enum VoiceAssistantState {
   processing,
   aiSpeaking,
   error,
+}
+
+/// Product selection event when multiple varieties are available
+class ProductSelectionEvent {
+  final String productName;
+  final String action;
+  final double quantity;
+  final List<ProductOption> options;
+
+  ProductSelectionEvent({
+    required this.productName,
+    required this.action,
+    required this.quantity,
+    required this.options,
+  });
+}
+
+/// Product option for selection
+class ProductOption {
+  final String productId;
+  final String name;
+  final String? brand;
+  final double price;
+  final String unit;
+  final int inCart;
+  final String? storeId;
+  final String? storeName;
+
+  ProductOption({
+    required this.productId,
+    required this.name,
+    this.brand,
+    required this.price,
+    required this.unit,
+    required this.inCart,
+    this.storeId,
+    this.storeName,
+  });
+
+  factory ProductOption.fromJson(Map<String, dynamic> json) {
+    return ProductOption(
+      productId: json['product_id'] ?? '',
+      name: json['name'] ?? '',
+      brand: json['brand'],
+      price: (json['price'] ?? 0).toDouble(),
+      unit: json['unit'] ?? '',
+      inCart: (json['in_cart'] ?? 0) is int ? json['in_cart'] : (json['in_cart'] as num).toInt(),
+      storeId: json['store_id'],
+      storeName: json['store_name'],
+    );
+  }
 }

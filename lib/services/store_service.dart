@@ -73,6 +73,27 @@ class StoreService {
     return [];
   }
 
+  // Get Demo Stores (no location required)
+  Future<List<StoreModel>> getDemoStores() async {
+    final response = await _api.get('${ApiConfig.stores}/demo');
+
+    try {
+      if (response is List) {
+        final List<StoreModel> stores = [];
+        for (var storeData in response) {
+          if (storeData is Map<String, dynamic>) {
+            stores.add(StoreModel.fromJson(storeData));
+          }
+        }
+        return stores;
+      }
+    } catch (e) {
+      print('Error in getDemoStores: $e');
+      rethrow;
+    }
+    return [];
+  }
+
   // Get Store by ID
   Future<StoreModel> getStoreById(String storeId) async {
     final response = await _api.get('${ApiConfig.stores}/$storeId');

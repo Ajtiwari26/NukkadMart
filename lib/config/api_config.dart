@@ -1,6 +1,8 @@
 class ApiConfig {
   // Base URL - Production (Render)
-  static const String baseUrl = 'https://nukkadmartbackend.onrender.com';
+   //static const String baseUrl = 'https://nukkadmartbackend.onrender.com';
+  
+  static const String baseUrl = 'http://10.174.65.38:8000'; // Physical Device (Updated IP)
   
   static const String apiVersion = '/api/v1';
   static const String apiBaseUrl = '$baseUrl$apiVersion';
@@ -15,7 +17,12 @@ class ApiConfig {
   static const String ocr = '$apiBaseUrl/ocr';
   
   // WebSocket - Production
-  static const String wsBaseUrl = 'wss://nukkadmartbackend.onrender.com$apiVersion';
+  // static const String wsBaseUrl = 'wss://nukkadmartbackend.onrender.com$apiVersion';
+  
+  // WebSocket - Local testing
+  // static const String wsBaseUrl = 'ws://10.0.2.2:8000$apiVersion'; // Defaulting to Android emulator
+  // static const String wsBaseUrl = 'ws://127.0.0.1:8000$apiVersion'; // iOS Simulator
+  static const String wsBaseUrl = 'ws://10.174.65.38:8000$apiVersion'; // Physical Device (Updated IP)
   
   // Timeouts
   static const Duration connectTimeout = Duration(seconds: 30);

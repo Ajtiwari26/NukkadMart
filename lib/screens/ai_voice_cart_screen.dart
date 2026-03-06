@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import 'dart:math';
 import '../services/voice_cart_service.dart';
 import '../providers/cart_provider.dart';
+import '../providers/auth_provider.dart';
+import '../providers/store_provider.dart';
 import '../services/location_cache_service.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_theme.dart';
@@ -21,6 +23,12 @@ class _AIVoiceCartScreenState extends State<AIVoiceCartScreen>
 
   final List<ConversationMessage> _conversation = [];
   final ScrollController _scrollController = ScrollController();
+
+  String? _selectedStoreId;
+  String? _selectedStoreName;
+  
+  // Product selection state
+  ProductSelectionEvent? _productSelection;
 
   late AnimationController _pulseController;
   late AnimationController _waveController;
@@ -62,14 +70,57 @@ class _AIVoiceCartScreenState extends State<AIVoiceCartScreen>
     _voiceService.cartActionStream.listen((cartAction) {
       if (!mounted) return;
       final cartProvider = Provider.of<CartProvider>(context, listen: false);
+      
       if (cartAction.action == 'add') {
         cartProvider.addItem(
           cartAction.product,
           storeId: cartAction.storeId,
           quantity: cartAction.quantity,
         );
+        // Show success notification with product name
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('✅ ${cartAction.product.name} added to cart'),
+            backgroundColor: AppColors.success,
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } else if (cartAction.action == 'update') {
+        // Update quantity - remove old and add new
+        cartProvider.removeItem(cartAction.product.productId);
+        cartProvider.addItem(
+          cartAction.product,
+          storeId: cartAction.storeId,
+          quantity: cartAction.quantity,
+        );
+        // Show update notification
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('🔄 ${cartAction.product.name} updated to ${cartAction.quantity.toInt()}'),
+            backgroundColor: AppColors.primary,
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       } else if (cartAction.action == 'remove') {
         cartProvider.removeItem(cartAction.product.productId);
+        // Show removal notification
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('🗑️ ${cartAction.product.name} removed from cart'),
+            backgroundColor: AppColors.warning,
+            duration: const Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    });
+    
+    // Listen to product selection events
+    _voiceService.productSelectionStream.listen((selectionEvent) {
+      if (mounted) {
+        setState(() => _productSelection = selectionEvent);
       }
     });
   }
@@ -86,48 +137,183 @@ class _AIVoiceCartScreenState extends State<AIVoiceCartScreen>
     });
   }
 
-  Future<void> _toggleSession() async {
-    if (_state == VoiceAssistantState.idle || _state == VoiceAssistantState.error) {
-      // Start session
-      try {
+  void _showStorePickerAndConnect() {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final isDemoMode = authProvider.isDemoMode;
+
+    if (isDemoMode) {
+      // Demo mode — show TestShop 1, 2, 3
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: AppColors.surface,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (ctx) {
+          final demoStores = [
+            {'id': 'DEMO_STORE_1', 'name': 'TestShop 1 - Kirana Corner'},
+            {'id': 'DEMO_STORE_2', 'name': 'TestShop 2 - Daily Needs'},
+            {'id': 'DEMO_STORE_3', 'name': 'TestShop 3 - Fresh Mart'},
+          ];
+          return Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Select a Shop', style: AppTheme.heading3),
+                const SizedBox(height: 4),
+                Text('Choose which shop to build your voice cart for',
+                    style: AppTheme.bodySmall.copyWith(color: AppColors.textSecondary)),
+                const SizedBox(height: 16),
+                ...demoStores.map((store) => ListTile(
+                  leading: const Icon(Icons.storefront_rounded, color: AppColors.primary),
+                  title: Text(store['name']!, style: AppTheme.bodyMedium.copyWith(fontWeight: FontWeight.w600)),
+                  trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    setState(() {
+                      _selectedStoreId = store['id'];
+                      _selectedStoreName = store['name'];
+                    });
+                    _startVoiceSession(storeId: store['id']);
+                  },
+                )),
+                const SizedBox(height: 8),
+              ],
+            ),
+          );
+        },
+      );
+    } else {
+      // Normal mode — use nearby stores from StoreProvider
+      final storeProvider = Provider.of<StoreProvider>(context, listen: false);
+      final stores = storeProvider.stores;
+      
+      if (stores.isEmpty) {
+        // No stores loaded — just connect without store selection
+        _startVoiceSession();
+        return;
+      }
+
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: AppColors.surface,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (ctx) {
+          return Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Select a Shop', style: AppTheme.heading3),
+                const SizedBox(height: 4),
+                Text('Choose which shop to build your voice cart for',
+                    style: AppTheme.bodySmall.copyWith(color: AppColors.textSecondary)),
+                const SizedBox(height: 16),
+                ...stores.take(5).map((store) => ListTile(
+                  leading: const Icon(Icons.storefront_rounded, color: AppColors.primary),
+                  title: Text(store.name, style: AppTheme.bodyMedium.copyWith(fontWeight: FontWeight.w600)),
+                  trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    setState(() {
+                      _selectedStoreId = store.storeId;
+                      _selectedStoreName = store.name;
+                    });
+                    _startVoiceSession(storeId: store.storeId);
+                  },
+                )),
+                const SizedBox(height: 8),
+              ],
+            ),
+          );
+        },
+      );
+    }
+  }
+
+  Future<void> _startVoiceSession({String? storeId}) async {
+    try {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final isDemoMode = authProvider.isDemoMode;
+      
+      if (isDemoMode) {
+        // Demo mode: No location needed, just store_id
+        await _voiceService.startSession(
+          'user_123',
+          latitude: null,  // Not needed in demo mode
+          longitude: null,  // Not needed in demo mode
+          storeId: storeId,
+        );
+      } else {
+        // Normal mode: Require cached location
         final cachedLocation = await LocationCacheService.getLocation();
         if (cachedLocation == null) {
-          throw Exception('Location not available');
+          throw Exception('Location not available. Please enable location from home screen.');
         }
-
+        
         await _voiceService.startSession(
           'user_123',
           latitude: cachedLocation['lat'],
           longitude: cachedLocation['lng'],
+          storeId: storeId,
         );
-
-        // Auto-start live streaming after connecting
-        await Future.delayed(const Duration(milliseconds: 500));
-        await _voiceService.startLiveStreaming();
-
-        // Add greeting
-        setState(() {
-          _conversation.add(ConversationMessage(
-            text: 'Namaste! Bataiye aapko kya chahiye?',
-            isUser: false,
-            timestamp: DateTime.now(),
-          ));
-        });
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Connection failed: $e'),
-              backgroundColor: AppColors.error,
-            ),
-          );
-        }
       }
+
+      // Auto-start live streaming after connecting
+      await Future.delayed(const Duration(milliseconds: 500));
+    
+      // Sync existing cart state to backend so in_cart checks are accurate
+      final cartProvider = Provider.of<CartProvider>(context, listen: false);
+      if (cartProvider.items.isNotEmpty) {
+        final cartItems = cartProvider.items.map((item) => {
+          'product_id': item.product.productId,
+          'quantity': item.quantity,
+        }).toList();
+        _voiceService.sendCartSync(cartItems);
+      }
+    
+      await _voiceService.startLiveStreaming();
+
+      // Add greeting
+      setState(() {
+        _conversation.add(ConversationMessage(
+          text: _selectedStoreName != null
+              ? 'Namaste! Aap $_selectedStoreName se shopping kar rahe hain. Bataiye aapko kya chahiye?'
+              : 'Namaste! Bataiye aapko kya chahiye?',
+          isUser: false,
+          timestamp: DateTime.now(),
+        ));
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Connection failed: $e'),
+            backgroundColor: AppColors.error,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _toggleSession() async {
+    if (_state == VoiceAssistantState.idle || _state == VoiceAssistantState.error) {
+      // Show store picker first
+      _showStorePickerAndConnect();
     } else {
       // End session
       await _voiceService.endSession();
       setState(() {
         _state = VoiceAssistantState.idle;
+        _selectedStoreId = null;
+        _selectedStoreName = null;
       });
     }
   }
@@ -142,6 +328,7 @@ class _AIVoiceCartScreenState extends State<AIVoiceCartScreen>
             _buildTopBar(),
             _buildStateIndicator(),
             Expanded(child: _buildConversationView()),
+            if (_productSelection != null) _buildProductSelectionPanel(),
             _buildCartPreview(),
             _buildVoiceButton(),
             const SizedBox(height: 16),
@@ -531,23 +718,47 @@ class _AIVoiceCartScreenState extends State<AIVoiceCartScreen>
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(color: AppColors.border),
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text(
-                            item.product.name,
-                            style: AppTheme.bodySmall.copyWith(
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textPrimary,
-                              fontSize: 12,
-                            ),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                item.product.name,
+                                style: AppTheme.bodySmall.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textPrimary,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              Text(
+                                '${item.quantity.toInt()}x ₹${item.product.price.toStringAsFixed(0)}',
+                                style: AppTheme.caption.copyWith(
+                                  color: AppColors.primary,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
                           ),
-                          Text(
-                            '${item.quantity}x ₹${item.product.price}',
-                            style: AppTheme.caption.copyWith(
-                              color: AppColors.primary,
-                              fontSize: 11,
+                          const SizedBox(width: 6),
+                          GestureDetector(
+                            onTap: () {
+                              cart.removeItem(item.product.productId);
+                            },
+                            child: Container(
+                              width: 20,
+                              height: 20,
+                              decoration: BoxDecoration(
+                                color: AppColors.error.withOpacity(0.15),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.close,
+                                size: 12,
+                                color: AppColors.error,
+                              ),
                             ),
                           ),
                         ],
@@ -560,13 +771,45 @@ class _AIVoiceCartScreenState extends State<AIVoiceCartScreen>
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Total', style: AppTheme.label),
-                  Text(
-                    '₹${cart.total.toStringAsFixed(0)}',
-                    style: AppTheme.priceStyle.copyWith(
-                      color: AppColors.primary,
-                      fontSize: 17,
-                    ),
+                  Text('Subtotal', style: AppTheme.label),
+                  Row(
+                    children: [
+                      Text(
+                        '₹${cart.subtotal.toStringAsFixed(0)}',
+                        style: AppTheme.priceStyle.copyWith(
+                          color: AppColors.primary,
+                          fontSize: 17,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      GestureDetector(
+                        onTap: () => Navigator.pushNamed(context, '/cart'),
+                        child: Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: const LinearGradient(
+                              colors: [AppColors.primary, AppColors.primaryDark],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppColors.primary.withOpacity(0.3),
+                                blurRadius: 8,
+                                spreadRadius: 1,
+                              ),
+                            ],
+                          ),
+                          child: const Icon(
+                            Icons.arrow_forward_rounded,
+                            size: 20,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -733,6 +976,170 @@ class _AIVoiceCartScreenState extends State<AIVoiceCartScreen>
 
   String _formatTime(DateTime time) {
     return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+  }
+  
+  Widget _buildProductSelectionPanel() {
+    if (_productSelection == null) return const SizedBox.shrink();
+    
+    return Container(
+      constraints: const BoxConstraints(maxHeight: 300),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: Border(
+          top: BorderSide(color: AppColors.border, width: 1),
+        ),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                const Icon(Icons.shopping_basket_rounded, color: AppColors.primary, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Select ${_productSelection!.productName}',
+                    style: AppTheme.bodyMedium.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close, size: 20),
+                  onPressed: () => setState(() => _productSelection = null),
+                  color: AppColors.textSecondary,
+                ),
+              ],
+            ),
+          ),
+          const Divider(height: 1, color: AppColors.border),
+          // Product options list
+          Expanded(
+            child: ListView.builder(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              itemCount: _productSelection!.options.length,
+              itemBuilder: (context, index) {
+                final option = _productSelection!.options[index];
+                return _buildProductOptionCard(option);
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildProductOptionCard(ProductOption option) {
+    return GestureDetector(
+      onTap: () => _onProductSelected(option),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: AppColors.background,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppColors.border),
+        ),
+        child: Row(
+          children: [
+            // Product icon
+            Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.inventory_2_rounded, color: AppColors.primary, size: 24),
+            ),
+            const SizedBox(width: 12),
+            // Product details
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    option.name,
+                    style: AppTheme.bodyMedium.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  if (option.brand != null)
+                    Text(
+                      option.brand!,
+                      style: AppTheme.caption.copyWith(color: AppColors.textSecondary),
+                    ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Text(
+                        '₹${option.price.toStringAsFixed(0)}',
+                        style: AppTheme.bodyMedium.copyWith(
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        '/ ${option.unit}',
+                        style: AppTheme.caption.copyWith(color: AppColors.textSecondary),
+                      ),
+                      if (option.inCart > 0) ...[
+                        const SizedBox(width: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppColors.success.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            '${option.inCart} in cart',
+                            style: AppTheme.caption.copyWith(
+                              color: AppColors.success,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            // Add button
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.primary,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.add_rounded, color: AppColors.buttonText, size: 20),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+  
+  void _onProductSelected(ProductOption option) {
+    // Send selection to backend
+    _voiceService.sendProductSelection(
+      option.productId,
+      _productSelection!.quantity,
+    );
+    
+    // Clear selection panel
+    setState(() => _productSelection = null);
+    
+    // Show animation (item dropping to cart)
+    // TODO: Add drop animation
   }
 
   @override
