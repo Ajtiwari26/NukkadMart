@@ -121,6 +121,12 @@ class _AIVoiceCartScreenState extends State<AIVoiceCartScreen>
     _voiceService.productSelectionStream.listen((selectionEvent) {
       if (mounted) {
         setState(() => _productSelection = selectionEvent);
+        // Mute mic when selection panel appears, unmute when cleared
+        if (selectionEvent != null) {
+          _voiceService.muteMic();
+        } else {
+          _voiceService.unmuteMic();
+        }
       }
     });
   }
@@ -1011,7 +1017,10 @@ class _AIVoiceCartScreenState extends State<AIVoiceCartScreen>
                 ),
                 IconButton(
                   icon: const Icon(Icons.close, size: 20),
-                  onPressed: () => setState(() => _productSelection = null),
+                  onPressed: () {
+                    setState(() => _productSelection = null);
+                    _voiceService.unmuteMic();
+                  },
                   color: AppColors.textSecondary,
                 ),
               ],
@@ -1135,8 +1144,9 @@ class _AIVoiceCartScreenState extends State<AIVoiceCartScreen>
       _productSelection!.quantity,
     );
     
-    // Clear selection panel
+    // Clear selection panel and unmute mic
     setState(() => _productSelection = null);
+    _voiceService.unmuteMic();
     
     // Show animation (item dropping to cart)
     // TODO: Add drop animation

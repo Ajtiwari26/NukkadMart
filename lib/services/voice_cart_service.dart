@@ -26,6 +26,8 @@ class VoiceCartService {
   
   // Flag to discard mic input while AI is talking
   bool _isAiSpeaking = false;
+  // Flag to mute mic during selection panel (prevents new searches)
+  bool _isMicMuted = false;
   // Hold AI text until the TTS audio actually plays
   String? _pendingAITranscript;
 
@@ -133,8 +135,8 @@ class VoiceCartService {
       // Stream audio chunks directly to WebSocket in real-time
       _audioStreamSub = stream.listen((chunk) {
         if (_channel != null && _isStreaming) {
-          // If AI is speaking, do not send user audio back to backend (prevents echo loop)
-          if (!_isAiSpeaking) {
+          // Skip sending audio if AI is speaking (echo prevention) or mic is muted (selection panel)
+          if (!_isAiSpeaking && !_isMicMuted) {
             // Send PCM audio directly to backend
             _channel!.sink.add(Uint8List.fromList(chunk));
           }
@@ -383,6 +385,32 @@ class VoiceCartService {
       }));
       print('🔄 Synced ${cartItems.length} cart items to backend');
     }
+  }
+
+  /// Mute the mic — stops sending audio chunks to backend.
+  /// Used when selection panel is open to prevent voice input interference.
+  void muteMic() {
+    if (_isMicMuted) return;
+    _isMicMuted = true;
+    // Tell backend we stopped sending audio
+    if (_channel != null) {
+      _channel!.sink.add(json.encode({'event': 'end_audio'}));
+    }
+    print('🔇 Mic muted (selection panel)');
+  }
+
+  /// Unmute the mic — resumes sending audio chunks to backend.
+  void unmuteMic() {
+    if (!_isMicMuted) return;
+    _isMicMuted = false;
+    // Tell backend we're sending audio again
+    if (_channel != null) {
+      _channel!.sink.add(json.encode({'event': 'start_audio'}));
+    }
+    if (_isStreaming) {
+      _stateController.add(VoiceAssistantState.listening);
+    }
+    print('🔊 Mic unmuted (selection panel closed)');
   }
 }
 

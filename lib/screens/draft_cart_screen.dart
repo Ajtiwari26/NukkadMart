@@ -41,6 +41,7 @@ class _DraftCartScreenState extends State<DraftCartScreen> {
   late List<Map<String, dynamic>> _adjustedItems;
   late List<Map<String, dynamic>> _ambiguousItems;
   late List<Map<String, dynamic>> _unresolvedItems;
+  late List<Map<String, dynamic>> _crossStoreItems;
 
   bool _isAddingToCart = false;
   final Map<String, bool> _manualLoadingMap = {}; // Tracks loading state for each manual item
@@ -57,6 +58,7 @@ class _DraftCartScreenState extends State<DraftCartScreen> {
     _adjustedItems = [];
     _ambiguousItems = [];
     _unresolvedItems = [];
+    _crossStoreItems = [];
 
     // Heuristic: If these terms are matched to something very specific, force user to verify.
     final genericTerms = ['milk', 'curd', 'paneer', 'bread', 'butter', 'cheese', 'egg', 'eggs', 'sugar', 'salt', 'rice', 'dal', 'oil'];
@@ -105,7 +107,11 @@ class _DraftCartScreenState extends State<DraftCartScreen> {
         }
       }
 
-      if (item['status'] == 'ambiguous' || forceAmbiguous) {
+      if (item['status'] == 'cross_store' || item['is_cross_store'] == true) {
+        // Cross-store item — separate section
+        if (item['alternatives'] == null) item['alternatives'] = [];
+        _crossStoreItems.add(item);
+      } else if (item['status'] == 'ambiguous' || forceAmbiguous) {
         // Ensure alternatives exist or default to empty
         if (item['alternatives'] == null) item['alternatives'] = [];
         
@@ -757,6 +763,34 @@ class _DraftCartScreenState extends State<DraftCartScreen> {
                 const SizedBox(height: 24),
               ],
 
+              // Cross-Store Items
+              if (_crossStoreItems.isNotEmpty) ...[
+                _buildSectionTitle('From Other Shops', Icons.store_mall_directory_rounded, Colors.amber),
+                Container(
+                  padding: EdgeInsets.all(12),
+                  margin: EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withOpacity(0.06),
+                    border: Border.all(color: Colors.amber.withOpacity(0.2)),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline, color: Colors.amber, size: 16),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'These items are not available in your selected shop but were found in other shops.',
+                          style: TextStyle(color: Colors.amber[200], fontSize: 12),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                ..._crossStoreItems.map((item) => _buildCrossStoreItem(item)),
+                const SizedBox(height: 24),
+              ],
+
               // Perfect Matches
               if (_perfectMatches.isNotEmpty) ...[
                  _buildSectionTitle('Perfect Matches (${_perfectMatches.length})', Icons.check_circle, kPrimaryColor),
@@ -1203,6 +1237,146 @@ class _DraftCartScreenState extends State<DraftCartScreen> {
     );
   }
 
+  Widget _buildCrossStoreItem(Map<String, dynamic> item) {
+    final storeName = item['source_store_name'] ?? 'Another Shop';
+    final alternatives = (item['alternatives'] as List?) ?? [];
+    final hasMultipleVarieties = alternatives.length > 1;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.amber.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Colors.amber.withOpacity(0.25),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 70,
+                height: 70,
+                decoration: BoxDecoration(
+                  color: Colors.white10,
+                  borderRadius: BorderRadius.circular(8),
+                  image: item['thumbnail'] != null
+                      ? DecorationImage(image: NetworkImage(item['thumbnail']), fit: BoxFit.cover)
+                      : null,
+                ),
+                child: item['thumbnail'] == null ? Icon(Icons.shopping_bag, color: Colors.white54) : null,
+              ),
+              SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item['name'] ?? 'Unknown',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white),
+                    ),
+                    SizedBox(height: 4),
+                    if (item['brand'] != null)
+                      Text(item['brand'], style: TextStyle(color: Colors.grey, fontSize: 12)),
+                    SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Text(
+                          '₹${item['price']}',
+                          style: TextStyle(color: kPrimaryColor, fontWeight: FontWeight.bold, fontSize: 15),
+                        ),
+                        SizedBox(width: 8),
+                        Text('/ ${item['unit'] ?? ''}', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                      ],
+                    ),
+                    SizedBox(height: 8),
+                    // Cross-store badge
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.withOpacity(0.12),
+                        border: Border.all(color: Colors.amber.withOpacity(0.3)),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.store_mall_directory_rounded, size: 13, color: Colors.amber),
+                          SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              'From $storeName',
+                              style: TextStyle(color: Colors.amber, fontSize: 11, fontWeight: FontWeight.w600),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if (hasMultipleVarieties) ...[
+                      SizedBox(height: 6),
+                      Container(
+                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withOpacity(0.12),
+                          border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.inventory_2, size: 13, color: Colors.blue),
+                            SizedBox(width: 4),
+                            Text(
+                              '${alternatives.length} varieties available',
+                              style: TextStyle(color: Colors.blue, fontSize: 11, fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              // Show varieties button if multiple options
+              if (hasMultipleVarieties)
+                TextButton.icon(
+                  onPressed: () => _showCrossStoreVarieties(item),
+                  icon: Icon(Icons.list, size: 16, color: Colors.blue),
+                  label: Text('See Varieties', style: TextStyle(color: Colors.blue)),
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  ),
+                ),
+              if (hasMultipleVarieties) SizedBox(width: 8),
+              // Add button - moves to perfect matches
+              ElevatedButton.icon(
+                onPressed: () => _moveCrossStoreToMatches(item),
+                icon: Icon(Icons.check, size: 16),
+                label: Text('Add'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: kPrimaryColor,
+                  foregroundColor: Colors.black,
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildPerfectMatchItem(Map<String, dynamic> item) {
     final quantity = (item['matched_quantity'] ?? 1).toInt();
     final isRemoved = item['removed'] == true;
@@ -1413,6 +1587,138 @@ class _DraftCartScreenState extends State<DraftCartScreen> {
           color: color,
           fontSize: 12,
           fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+  // Move cross-store item to perfect matches section
+  void _moveCrossStoreToMatches(Map<String, dynamic> item) {
+    setState(() {
+      // Remove from cross-store items
+      _crossStoreItems.remove(item);
+      
+      // Add to perfect matches with cross-store flag preserved
+      final matchedItem = {
+        ...item,
+        'status': 'perfect',
+        'confirmed': true,
+        'is_cross_store': true, // Keep cross-store flag
+        'line_total': (item['matched_quantity'] ?? 1) * (item['price'] ?? 0),
+      };
+      
+      _perfectMatches.add(matchedItem);
+    });
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('✅ ${item['name']} added to cart list'),
+        backgroundColor: kPrimaryColor,
+        duration: Duration(seconds: 1),
+      ),
+    );
+  }
+
+  // Show varieties selection for cross-store items
+  void _showCrossStoreVarieties(Map<String, dynamic> item) {
+    final alternatives = (item['alternatives'] as List?) ?? [];
+    
+    if (alternatives.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No varieties available')),
+      );
+      return;
+    }
+    
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: kBackgroundDark,
+      isScrollControlled: true,
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        minChildSize: 0.4,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (_, scrollController) => Container(
+          padding: EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.store_mall_directory_rounded, color: Colors.amber, size: 20),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      "Select Variety from ${item['source_store_name'] ?? 'Other Shop'}",
+                      style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 16),
+              Expanded(
+                child: ListView.builder(
+                  controller: scrollController,
+                  itemCount: alternatives.length,
+                  itemBuilder: (ctx, index) {
+                    final alt = alternatives[index];
+                    return Container(
+                      margin: EdgeInsets.only(bottom: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white10,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.amber.withOpacity(0.3)),
+                      ),
+                      child: ListTile(
+                        leading: Container(
+                          width: 50,
+                          height: 50,
+                          decoration: BoxDecoration(
+                            color: Colors.white10,
+                            borderRadius: BorderRadius.circular(8),
+                            image: (alt['thumbnail'] != null)
+                                ? DecorationImage(image: NetworkImage(alt['thumbnail']), fit: BoxFit.cover)
+                                : null,
+                          ),
+                          child: (alt['thumbnail'] == null) ? Icon(Icons.shopping_bag, color: Colors.white54) : null,
+                        ),
+                        title: Text(alt['name'] ?? '', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (alt['brand'] != null)
+                              Text(alt['brand'], style: TextStyle(color: Colors.grey, fontSize: 12)),
+                            SizedBox(height: 4),
+                            Row(
+                              children: [
+                                Text('₹${alt['price']}', style: TextStyle(color: kPrimaryColor, fontWeight: FontWeight.bold)),
+                                SizedBox(width: 4),
+                                Text('/ ${alt['unit'] ?? ''}', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                              ],
+                            ),
+                          ],
+                        ),
+                        trailing: ElevatedButton(
+                          onPressed: () {
+                            // Move this variety to perfect matches
+                            _moveCrossStoreToMatches(alt);
+                            Navigator.pop(ctx);
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: kPrimaryColor,
+                            foregroundColor: Colors.black,
+                            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          ),
+                          child: Text('Add'),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

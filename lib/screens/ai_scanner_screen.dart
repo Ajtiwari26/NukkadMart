@@ -9,6 +9,7 @@ import '../config/api_config.dart';
 import '../models/product_model.dart';
 import '../providers/store_provider.dart';
 import '../providers/cart_provider.dart';
+import '../providers/auth_provider.dart';
 import '../utils/app_colors.dart';
 import '../utils/app_theme.dart';
 import 'draft_cart_screen.dart';
@@ -25,6 +26,109 @@ class _AiScannerScreenState extends State<AiScannerScreen> {
   final ImagePicker _picker = ImagePicker();
   bool _isProcessing = false;
   String? _errorMessage;
+  String? _selectedStoreId;
+  String? _selectedStoreName;
+
+  /// Show store picker before scanning (like voice cart)
+  void _showStorePicker({required VoidCallback onStoreSelected}) {
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final isDemoMode = authProvider.isDemoMode;
+
+    if (isDemoMode) {
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: AppColors.surface,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (ctx) {
+          final demoStores = [
+            {'id': 'DEMO_STORE_1', 'name': 'TestShop 1 - Kirana Corner'},
+            {'id': 'DEMO_STORE_2', 'name': 'TestShop 2 - Daily Needs'},
+            {'id': 'DEMO_STORE_3', 'name': 'TestShop 3 - Fresh Mart'},
+          ];
+          return Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Select a Shop', style: AppTheme.heading3),
+                const SizedBox(height: 4),
+                Text('Choose which shop to scan your list for',
+                    style: AppTheme.bodySmall.copyWith(color: AppColors.textSecondary)),
+                const SizedBox(height: 16),
+                ...demoStores.map((store) => ListTile(
+                  leading: const Icon(Icons.storefront_rounded, color: AppColors.primary),
+                  title: Text(store['name']!, style: AppTheme.bodyMedium.copyWith(fontWeight: FontWeight.w600)),
+                  trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    setState(() {
+                      _selectedStoreId = store['id'];
+                      _selectedStoreName = store['name'];
+                    });
+                    onStoreSelected();
+                  },
+                )),
+                const SizedBox(height: 8),
+              ],
+            ),
+          );
+        },
+      );
+    } else {
+      final storeProvider = Provider.of<StoreProvider>(context, listen: false);
+      final stores = storeProvider.stores;
+
+      if (stores.isEmpty) {
+        setState(() {
+          _errorMessage = 'No stores available. Please go back and ensure location is enabled.';
+        });
+        return;
+      }
+
+      showModalBottomSheet(
+        context: context,
+        backgroundColor: AppColors.surface,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (ctx) {
+          return Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Select a Shop', style: AppTheme.heading3),
+                const SizedBox(height: 4),
+                Text('Choose which shop to scan your list for',
+                    style: AppTheme.bodySmall.copyWith(color: AppColors.textSecondary)),
+                const SizedBox(height: 16),
+                ...stores.take(5).map((store) => ListTile(
+                  leading: const Icon(Icons.storefront_rounded, color: AppColors.primary),
+                  title: Text(store.name, style: AppTheme.bodyMedium.copyWith(fontWeight: FontWeight.w600)),
+                  trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    setState(() {
+                      _selectedStoreId = store.storeId;
+                      _selectedStoreName = store.name;
+                    });
+                    onStoreSelected();
+                  },
+                )),
+                const SizedBox(height: 8),
+              ],
+            ),
+          );
+        },
+      );
+    }
+  }
 
   /// Process image with backend OCR
   Future<void> _processImage(File imageFile) async {
@@ -35,19 +139,13 @@ class _AiScannerScreenState extends State<AiScannerScreen> {
     });
 
     try {
-      // Get a store_id to match against
-      final storeProvider = Provider.of<StoreProvider>(context, listen: false);
-      String storeId = '';
-      if (storeProvider.selectedStore != null) {
-        storeId = storeProvider.selectedStore!.storeId;
-      } else if (storeProvider.stores.isNotEmpty) {
-        storeId = storeProvider.stores.first.storeId;
-      }
+      // Use selected store from store picker
+      String storeId = _selectedStoreId ?? '';
 
       if (storeId.isEmpty) {
         setState(() {
           _isProcessing = false;
-          _errorMessage = 'No store selected. Please go back and select a store first.';
+          _errorMessage = 'No store selected. Please select a store first.';
         });
         return;
       }
@@ -125,6 +223,10 @@ class _AiScannerScreenState extends State<AiScannerScreen> {
   }
 
   Future<void> _captureImage() async {
+    if (_selectedStoreId == null) {
+      _showStorePicker(onStoreSelected: _captureImage);
+      return;
+    }
     final XFile? photo = await _picker.pickImage(
       source: ImageSource.camera,
       maxWidth: 1200,
@@ -137,6 +239,10 @@ class _AiScannerScreenState extends State<AiScannerScreen> {
   }
 
   Future<void> _pickFromGallery() async {
+    if (_selectedStoreId == null) {
+      _showStorePicker(onStoreSelected: _pickFromGallery);
+      return;
+    }
     final XFile? image = await _picker.pickImage(
       source: ImageSource.gallery,
       maxWidth: 1200,
@@ -219,6 +325,40 @@ class _AiScannerScreenState extends State<AiScannerScreen> {
                     Text('AI SCANNER', style: AppTheme.heading3.copyWith(color: AppColors.primary, letterSpacing: 1)),
                   ]),
                   const Spacer(),
+                  // Store selector chip
+                  GestureDetector(
+                    onTap: _isProcessing ? null : () => _showStorePicker(onStoreSelected: () {}),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: _selectedStoreId != null ? AppColors.primary.withOpacity(0.1) : AppColors.surfaceVariant,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: _selectedStoreId != null ? AppColors.primary.withOpacity(0.3) : AppColors.border),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.storefront_rounded, size: 14, color: _selectedStoreId != null ? AppColors.primary : AppColors.textTertiary),
+                          const SizedBox(width: 4),
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 90),
+                            child: Text(
+                              _selectedStoreName?.split(' - ').first ?? 'Select Shop',
+                              style: AppTheme.caption.copyWith(
+                                color: _selectedStoreId != null ? AppColors.primary : AppColors.textTertiary,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 11,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 2),
+                          Icon(Icons.arrow_drop_down, size: 16, color: _selectedStoreId != null ? AppColors.primary : AppColors.textTertiary),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
                   IconButton(
                     onPressed: _showHelpDialog,
                     icon: Icon(Icons.help_outline_rounded, color: AppColors.textSecondary),
