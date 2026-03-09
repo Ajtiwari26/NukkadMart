@@ -143,7 +143,7 @@ class NukkadMartApp extends StatelessWidget {
           '/map-picker': (context) => const MapPickerScreen(),
           '/ai-scanner': (context) => const AiScannerScreen(),
           '/search': (context) => const SearchScreen(),
-          '/voice-cart': (context) => const AIVoiceCartScreen(),
+          '/ai-voice-cart': (context) => const AIVoiceCartScreen(),
         },
       ),
     );

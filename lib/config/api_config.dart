@@ -1,10 +1,10 @@
 class ApiConfig {
   // Base URL - Production (AWS EC2 Mumbai)
-  //static const String baseUrl = 'http://13.235.254.91:8000';
+  static const String baseUrl = 'http://13.235.254.91:8000';
     // Base URL - Production (Render)
    //static const String baseUrl = 'https://nukkadmartbackend.onrender.com';
   //Physical device ip for local backend
-  static const String baseUrl = 'http://10.174.65.38:8000'; // Physical Device (Updated IP)
+  //static const String baseUrl = 'http://10.174.65.38:8000'; // Physical Device (Updated IP)
   static const String apiVersion = '/api/v1';
   static const String apiBaseUrl = '$baseUrl$apiVersion';
   
@@ -18,7 +18,7 @@ class ApiConfig {
   static const String ocr = '$apiBaseUrl/ocr';
   
   // WebSocket - Production (AWS EC2)
-  //static const String wsBaseUrl = 'ws://13.235.254.91:8000$apiVersion';
+  static const String wsBaseUrl = 'ws://13.235.254.91:8000$apiVersion';
   
   // Timeouts
   static const Duration connectTimeout = Duration(seconds: 30);
