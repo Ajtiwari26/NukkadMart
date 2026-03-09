@@ -1,10 +1,23 @@
 class ApiConfig {
-  // Base URL - Production (AWS EC2 Mumbai)
-  static const String baseUrl = 'http://13.235.254.91:8000';
-    // Base URL - Production (Render)
-   //static const String baseUrl = 'https://nukkadmartbackend.onrender.com';
-  //Physical device ip for local backend
-  //static const String baseUrl = 'http://10.174.65.38:8000'; // Physical Device (Updated IP)
+  // ============================================
+  // BASE URL CONFIGURATION
+  // Uncomment the one you need, comment others
+  // ============================================
+  
+  // Local Development (for web testing)
+  // static const String baseUrl = 'http://localhost:8000';
+  
+  // Production - AWS EC2 (domain with HTTPS)
+  static const String baseUrl = 'https://api.nukkadfoods.com';
+  
+  // Production - Render
+  // static const String baseUrl = 'https://nukkadmartbackend.onrender.com';
+  
+  // Physical Device (Local Network - Update IP as needed)
+  // static const String baseUrl = 'http://10.174.65.38:8000';
+  
+  // ============================================
+  
   static const String apiVersion = '/api/v1';
   static const String apiBaseUrl = '$baseUrl$apiVersion';
   
@@ -17,8 +30,21 @@ class ApiConfig {
   static const String nudge = '$apiBaseUrl/nudge';
   static const String ocr = '$apiBaseUrl/ocr';
   
-  // WebSocket - Production (AWS EC2)
-  static const String wsBaseUrl = 'ws://13.235.254.91:8000$apiVersion';
+  // ============================================
+  // WEBSOCKET URL CONFIGURATION
+  // Must match the baseUrl above
+  // ============================================
+  
+  // Local Development
+  // static const String wsBaseUrl = 'ws://localhost:8000$apiVersion';
+  
+  // Production - AWS EC2
+  static const String wsBaseUrl = 'wss://api.nukkadfoods.com$apiVersion';
+  
+  // Physical Device (Local Network)
+  // static const String wsBaseUrl = 'ws://10.174.65.38:8000$apiVersion';
+  
+  // ============================================
   
   // Timeouts
   static const Duration connectTimeout = Duration(seconds: 30);
