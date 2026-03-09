@@ -433,9 +433,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Padding(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
                   child: GestureDetector(
-                    onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('Search — Coming Soon!'), backgroundColor: AppColors.primary),
-                    ),
+                    onTap: () => Navigator.pushNamed(context, '/search'),
                     child: Container(
                       height: 50,
                       decoration: BoxDecoration(
@@ -468,9 +466,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                           const SizedBox(width: 12),
                           GestureDetector(
-                            onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(content: Text('Voice Search — Coming Soon!'), backgroundColor: AppColors.primary),
-                            ),
+                            onTap: () => Navigator.pushNamed(context, '/voice-cart'),
                             child: Icon(
                               Icons.mic_outlined,
                               size: 22,

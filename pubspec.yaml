@@ -61,9 +61,9 @@ dev_dependencies:
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "assets/images/nukkad_mart_logo.png"
+  image_path: "assets/images/logo.png"
   adaptive_icon_background: "#7C3AED"
-  adaptive_icon_foreground: "assets/images/nukkad_mart_logo.png"
+  adaptive_icon_foreground: "assets/images/logo.png"
   remove_alpha_ios: true
 
 flutter:

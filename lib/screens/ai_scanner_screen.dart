@@ -151,8 +151,11 @@ class _AiScannerScreenState extends State<AiScannerScreen> {
       }
 
       // Upload image using multipart request
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final isDemo = authProvider.isDemoMode;
+      
       final uri = Uri.parse(
-        '${ApiConfig.ocr}/upload-and-match?store_id=$storeId&wait_for_result=true',
+        '${ApiConfig.ocr}/upload-and-match?store_id=$storeId&wait_for_result=true&is_demo=$isDemo',
       );
 
       // Determine content type from file extension

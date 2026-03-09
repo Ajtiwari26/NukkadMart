@@ -642,9 +642,12 @@ class _DraftCartScreenState extends State<DraftCartScreen> {
   }
 
   void _addItemToCart(CartProvider provider, Map<String, dynamic> item) {
+    // Use source_store_id for cross-store items, otherwise use widget.storeId
+    final actualStoreId = item['source_store_id'] ?? widget.storeId;
+    
     final product = ProductModel(
       productId: item['product_id'],
-      storeId: widget.storeId,
+      storeId: actualStoreId,
       name: item['name'],
       category: '', 
       price: (item['price'] ?? 0).toDouble(),
@@ -656,7 +659,7 @@ class _DraftCartScreenState extends State<DraftCartScreen> {
     );
     
     final qty = (item['matched_quantity'] ?? 1).toDouble();
-    provider.addItem(product, storeId: widget.storeId, quantity: qty);
+    provider.addItem(product, storeId: actualStoreId, quantity: qty);
   }
 
   double get _totalEstimated {

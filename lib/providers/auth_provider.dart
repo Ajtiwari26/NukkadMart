@@ -78,11 +78,19 @@ class AuthProvider with ChangeNotifier {
     try {
       _user = await _authService.quickRegister(name, phone);
       
+      // Clear demo mode flag when logging in as real user
+      _isDemoMode = false;
+      
       // Save to local storage
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('userId', _user!.userId);
       await prefs.setString('userName', _user!.name);
       await prefs.setString('userPhone', _user!.phone);
+      await prefs.setBool('isDemoMode', false); // Explicitly clear demo mode
+      
+      // CRITICAL: Clear store cache when switching from demo to real mode
+      await prefs.remove('cached_stores');
+      await prefs.remove('cached_stores_timestamp');
       
       _isLoading = false;
       notifyListeners();
